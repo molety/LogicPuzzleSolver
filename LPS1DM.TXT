@@ -1,0 +1,183 @@
+'===    Logic Puzzle Solver
+'===
+'===     DATA-MAKER   Ver 1.00
+'===             '95/3/15-'95/5/6
+'
+'=== Init ===
+SCREEN0:WIDTH40:COLOR15,1,1:CLS
+DEFINTA-Z
+
+
+
+'=== Select Menu ===
+PRINT"1:New / 2:Load"
+   do
+K$=INPUT$(1)
+IF K$="2" THEN *load_file
+   loop while K$<>"1"
+
+
+
+'=== New Data ===
+'--- Input ---
+   do
+INPUT"Height,Width";HT,WD
+   loop while HT<1 OR HT>255 OR WD<1 OR WD>255
+IF HT>WD THEN BM=(HT+1)\2 ELSE BM=(WD+1)\2
+DIM BL(BM-1,HT+WD-1),NB(HT+WD-1)
+FOR N=0 TO HT+WD-1
+IF N<HT THEN MX=WD ELSE MX=HT
+GOSUB *input_sub
+NEXT
+
+
+'--- Small Menu for New-Data ---
+   *new_data_menu
+BEEP:CLS
+PRINT"1:Check / 2:Fix / 3:Data Make"
+   do
+K$=INPUT$(1)
+IF K$="3" THEN *data_make
+IF K$="2" THEN *fix_data
+   loop while K$<>"1"
+
+
+'--- Review Data ---
+FOR N=0 TO HT+WD-1
+GOSUB *review_sub
+IF N MOD 10=9 THEN GOSUB *review_data1
+NEXT
+IF N MOD 10 THEN GOSUB *review_data1
+GOTO *new_data_menu
+   *review_data1
+PRINT"Push any key!!":BEEP:K$=INPUT$(1)
+RETURN
+
+
+'--- Fix Data ---
+   *fix_data
+DT$="":INPUT"Where";DT$
+IF DT$="" THEN *new_data_menu
+K$=LEFT$(DT$,1):N=VAL(MID$(DT$,2))-1
+IF (K$="R" OR K$="r")AND(N>=0 AND N<HT) THEN MX=WD:GOTO *fix_data1
+IF (K$="C" OR K$="c")AND(N>=0 AND N<WD) THEN MX=HT:N=N+HT ELSE BEEP:GOTO *fix_data
+   *fix_data1
+GOSUB *review_sub
+PRINT:PRINT"     V":PRINT"     V":PRINT
+GOSUB *input_sub
+GOTO *fix_data
+
+
+'--- VRAM Data Make ---
+   *data_make
+SCREEN5,2:SETPAGE0,0:CLS
+OPEN"GRP:"AS#1
+PRESET(40,90):PRINT#1,"Now setting work area."
+SETPAGE,2
+A1!=32:A2!=A1!+(WD+2)*(HT+2):A3!=A2!+(HT+2)*(WD+2)
+VPOKE 0,HT:VPOKE 1,WD
+
+FOR AD!=A1! TO A3!-1:VPOKE AD!,254:NEXT
+FOR AD!=A1! TO A1!+WD:VPOKE AD!,255:NEXT
+FOR AD!=A1!+WD+2 TO A2!-WD-2 STEP WD+2:VPOKE AD!-1,255:VPOKE AD!,255:NEXT
+FOR AD!=A2!-WD-1 TO A2!+HT:VPOKE AD!,255:NEXT
+FOR AD!=A2!+HT+2 TO A3!-HT-2 STEP HT+2:VPOKE AD!-1,255:VPOKE AD!,255:NEXT
+FOR AD!=A3!-HT-1 TO A3!-1:VPOKE AD!,255:NEXT
+
+AD!=A3!+(HT+WD)*5:BM=0
+FOR N=0 TO HT+WD-1
+IF BM<NB(N) THEN BM=NB(N)
+VPOKE A3!+N*5,NB(N)
+VPOKE A3!+N*5+4,0
+IF NB(N)>0 THEN *set_block_work1
+VPOKE A3!+N*5+1,0
+VPOKE A3!+N*5+2,0:VPOKE A3!+N*5+3,0
+GOTO *set_block_work2
+   *set_block_work1
+SU=0
+FOR I=0 TO NB(N)-1
+SU=SU+BL(I,N)
+NEXT
+IF N<HT THEN MX=WD ELSE MX=HT
+F1=MX+2-(SU+NB(N))
+VPOKE A3!+N*5+1,F1
+VPOKE A3!+N*5+2,AD!MOD256:VPOKE A3!+N*5+3,AD!\256
+FOR I=0 TO NB(N)-1
+VPOKE AD!,BL(I,N)
+AA!=AD!:FOR AD!=AA!+1 TO AA!+F1
+VPOKE AD!,1
+NEXT
+NEXT
+   *set_block_work2
+NEXT
+A4!=AD!
+
+VPOKE 2,A1!MOD256:VPOKE 3,A1!\256
+VPOKE 4,A2!MOD256:VPOKE 5,A2!\256
+VPOKE 6,A3!MOD256:VPOKE 7,A3!\256
+VPOKE 8,A4!MOD256:VPOKE 9,A4!\256
+VPOKE10,BM:VPOKE11, 0
+VPOKE12, 0:VPOKE13, 1
+
+VPOKE29,1:VPOKE30,2:VPOKE31,3
+
+GOTO *load_main
+
+
+
+'=== Load File ===
+   *load_file
+FILES:PRINT:PRINT
+   do
+FL$="":INPUT"Load Filename";FL$
+   loop while FL$=""
+SCREEN5,2:SETPAGE0,2
+BLOAD FL$,S
+
+
+
+'=== Load Main-Program ===
+   *load_main
+RUN"LPS1.BAS"
+END
+
+
+
+'=== Input Sub ===
+   *input_sub
+GOSUB *rc_print_sub
+I=0:SU=0
+LINEINPUT DT$
+   do
+IF VAL(DT$)=0 THEN *input_sub3
+LN=LEN(DT$):CM=INSTR(DT$,",")
+IF CM=0 THEN DT=VAL(DT$):DT$="":GOTO *input_sub2
+DT=VAL(LEFT$(DT$,CM-1))
+DT$=MID$(DT$,CM+1)
+   *input_sub2
+IF SU+DT+I>MX THEN PRINT"Over!":BEEP:GOTO *input_sub
+BL(I,N)=DT:SU=SU+DT:I=I+1
+   loop
+
+   *input_sub3
+NB(N)=I:RETURN
+
+
+
+'=== Review Sub ===
+   *review_sub
+GOSUB *rc_print_sub
+IF NB(N)=0 THEN PRINT 0:RETURN
+FOR I=0 TO NB(N)-1
+PRINT BL(I,N);
+NEXT:PRINT:RETURN
+
+
+
+'=== Row/Column Print Sub ===
+   *rc_print_sub
+IF N>=HT THEN *rc_print_sub1
+PRINT"Row   ";N+1   ;"Data:";:RETURN
+   *rc_print_sub1
+PRINT"Column";N-HT+1;"Data:";:RETURN
+

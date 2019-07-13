@@ -1,0 +1,477 @@
+'===    Logic Puzzle Solver
+'===
+'===     MAIN-PROGRAM   Ver 1.00
+'===             '95/3/31-'95/5/6
+'
+KEY1,"color15,1,1"+CHR$(13)
+KEY2,"screen5,2:run"+CHR$(13)
+
+'=== Init ===
+DEFINTA-Z:DX=1:DY=1
+ONSTRIGGOSUB *int_strig:STRIG(0)OFF
+OPEN"GRP:"AS#1
+DIM BL(0),OF(0)            'dummy
+DIM X1(0),X2(0),P1(0),P2(0)'dummy
+DIM VX(8),VY(8)
+FOR I=0 TO 8:READ VX(I),VY(I):NEXT
+
+DEFFNFA!(R,C,MX,AD!)=R*(MX+2)+C+AD!
+DEFFNF(R,C,MX,AD!)=VPEEK(R*(MX+2)+C+AD!)
+DEFFNWA!(K,P,F1,AD!)=(K-1)*(F1+1)+1+P+AD!
+DEFFNW(K,P,F1,AD!)=VPEEK((K-1)*(F1+1)+1+P+AD!)
+
+SETPAGE0,0:COLOR:COLOR1,14,14:CLS
+COLOR=(2,4,4,4)
+COLOR=(3,3,3,3)
+COLOR=(4,6,0,0)
+COLOR=(5,0,3,6)
+COLOR=(6,5,5,0)
+COLOR=(7,0,5,0)
+
+S$=""
+FOR I=0 TO 95
+READ K$:S$=S$+CHR$(VAL("&H"+K$))
+NEXT
+SPRITE$(0)=MID$(S$,1,32)
+SPRITE$(1)=MID$(S$,33,32)
+SPRITE$(2)=MID$(S$,65,32)
+S$=""
+
+SETPAGE,2
+IF VPEEK(29)<>1 THEN *main_menu
+IF VPEEK(30)<>2 THEN *main_menu
+IF VPEEK(31)<>3 THEN *main_menu
+GOSUB *set_variable
+
+
+
+'=== Menu ===
+   *main_menu
+SETPAGE1,1:CLS
+PRESET(95,35):PRINT#1,"1)Solve"
+PRESET(95,55):PRINT#1,"2)Fix"
+PRESET(95,75):PRINT#1,"3)Save"
+PRESET(95,95):PRINT#1,"4)Load"
+   do
+K$=INPUT$(1)
+IF K$="1" THEN *prepare
+IF K$="2" THEN *manual_fix
+IF K$="3" THEN *save_file
+   loop while K$<>"4"
+
+
+
+'=== Load File ===
+GOSUB *input_filename
+IF FL$="" THEN *main_menu
+SETPAGE,2
+BLOAD FL$,S
+GOSUB *set_variable
+SETPAGE,0:PSET(7,7),14
+GOTO *main_menu
+
+
+
+'=== Save File ===
+   *save_file
+GOSUB *input_filename
+IF FL$="" THEN *main_menu
+SETPAGE,2
+BSAVE FL$,0,A4!-1,S
+GOTO *main_menu
+
+
+
+'=== Manual Fix ===
+   *manual_fix
+SETPAGE,2:VPOKE12,0:VPOKE13,1
+GOSUB *set_screen:SETPAGE,0:DD=1
+   do
+PUTSPRITE0,(DX*4+3,DY*4+2),4,DD
+ST=STICK(0)
+LB=STRIG(0):RB=(PEEK(&HFBEB)AND4)\4-1
+K$=INKEY$
+IF K$=CHR$(27) THEN PUTSPRITE0,(0,217):GOTO *main_menu
+IF RB AND RF=0 THEN DD=(DD+1)MOD3:LF=0
+IF LB AND LF=0 THEN GOSUB *manual_fix2
+DX=(DX-1+VX(ST)+WD)MOD WD +1
+DY=(DY-1+VY(ST)+HT)MOD HT +1
+RF=RB:IF ST THEN LF=0
+   loop
+
+
+'--- Left-Button Pushed ---
+   *manual_fix2
+SETPAGE,2
+IF DD>0 THEN *manual_fix3
+
+IF FNF(DY,DX,WD,A1!)>253 THEN VPOKE FNFA!(DY,DX,WD,A1!),0
+IF FNF(DX,DY,HT,A2!)>253 THEN VPOKE FNFA!(DX,DY,HT,A2!),0
+GOTO *manual_fix4
+
+   *manual_fix3
+VPOKE FNFA!(DY,DX,WD,A1!),253+DD
+VPOKE FNFA!(DX,DY,HT,A2!),253+DD
+
+   *manual_fix4
+VPOKE A3!+(HT+DX-1)*5+4,0
+VPOKE A3!+(DY-1)*5+4,0
+SETPAGE,0
+GOSUB *draw_chr
+RETURN
+
+
+
+'=== Prepare to Solve ===
+   *prepare
+GOSUB *set_screen:SETPAGE,2
+N=VPEEK(11):C=VPEEK(12):RK=VPEEK(13)
+   do
+IF N<HT THEN MX=WD:MY=HT:M=N+1   :FA!=A1!:BA!=A2!:GOTO *prepare2
+             MX=HT:MY=WD:M=N-HT+1:FA!=A2!:BA!=A1!
+   *prepare2
+GOSUB *mark_set
+E=0:FF=0
+IF VPEEK(A3!+N*5+4)=1 THEN *prepare3
+ON RK GOSUB *solve_main_A,*solve_main_B',solve_main_C
+'E:´×°(ÌÞÚ²¸)Ì×¸Þ/C:Ã²À²¼À¶²½³
+   *prepare3
+GOSUB *mark_reset
+
+IF E>1 THEN *error
+IF FF=0 THEN C=C+1 ELSE C=0:IF RK>1 THEN RK=1:GOTO *prepare4
+N=(N+1)MOD(HT+WD):IF C>=HT+WD THEN GOSUB *cannot_go
+   *prepare4
+VPOKE11,N:VPOKE12,C:VPOKE13,RK
+
+IF E=1 THEN *main_menu
+   loop
+
+
+
+'=== Solve Main A ===
+   *solve_main_A
+IF VPEEK(A3!+N*5+4)=2 THEN RETURN
+NB=VPEEK(A3!+N*5)
+IF NB>0 THEN *solve_main_A1
+
+STRIG(0)ON
+FOR X=1 TO MX
+IF FNF(M,X,MX,FA!)=254 THEN GOSUB *put_dot:FF=1
+NEXT
+STRIG(0)OFF
+VPOKE A3!+N*5+4,1:RETURN
+
+   *solve_main_A1
+F1=VPEEK(A3!+N*5+1)
+AD!=VPEEK(A3!+N*5+2)+VPEEK(A3!+N*5+3)*256
+
+BL(0)=0:OF(0)=0
+FOR K=1 TO NB
+BL(K)=FNW(K,-1,F1,AD!)
+OF(K)=OF(K-1)+BL(K-1)+1
+NEXT
+
+
+'--- Decide Position of Block ---
+   *decide_pos
+STRIG(0)ON
+
+FOR K=1 TO NB
+X1(K)=1
+X2(K)=MX
+NEXT
+FOR X=1 TO MX
+D=FNF(M,X,MX,FA!)
+IF D=0 OR D>253 THEN *decide_pos3
+K=1
+   *decide_pos1
+IF D=K THEN *decide_pos2
+IF K<NB THEN K=K+1:GOTO *decide_pos1
+GOTO *decide_pos3
+
+   *decide_pos2
+IF X2(K)=MX THEN X2(K)=X
+X1(K)=X-BL(K)+1
+
+   *decide_pos3
+NEXT
+
+
+OF=1
+FOR K=1 TO NB
+P=-1:IF OF<X1(K) THEN OF=X1(K)
+   *decide_pos5
+P=P+1
+IF FNW(K,P,F1,AD!)=0 THEN *decide_pos5
+X=OF(K)+P
+IF X<OF THEN VPOKE FNWA!(K,P,F1,AD!),0:GOTO *decide_pos5
+GOSUB *test_block
+IF A=0 THEN VPOKE FNWA!(K,P,F1,AD!),0:GOTO *decide_pos5
+P1(K)=P:OF=X+BL(K)+1
+NEXT
+
+OF=MX-BL(NB)+1
+FOR K=NB TO 1 STEP -1
+P=F1:IF OF>X2(K) THEN OF=X2(K)
+   *decide_pos6
+P=P-1
+IF FNW(K,P,F1,AD!)=0 THEN *decide_pos6
+X=OF(K)+P
+IF X>OF THEN VPOKE FNWA!(K,P,F1,AD!),0:GOTO *decide_pos6
+GOSUB *test_block
+IF A=0 THEN VPOKE FNWA!(K,P,F1,AD!),0:GOTO *decide_pos6
+P2(K)=P:OF=X-BL(K-1)-1
+NEXT
+
+
+FOR K=1 TO NB
+IF P2(K)-P1(K)<2 THEN *decide_pos8
+X=OF(K)+P1(K)+1
+FOR P=P1(K)+1 TO P2(K)-1
+IF FNW(K,P,F1,AD!)=0 THEN *decide_pos7
+GOSUB *test_block
+IF A=0 THEN VPOKE FNWA!(K,P,F1,AD!),0
+   *decide_pos7
+X=X+1
+NEXT
+   *decide_pos8
+NEXT
+
+
+'--- Put Dot or Box ---
+F=0:CC=0
+FOR X=1 TO MX
+IF FNF(M,X,MX,FA!)=0    THEN *put_on_field6
+IF FNF(M,X,MX,FA!)<>254 THEN CC=CC+1:GOTO *put_on_field9
+
+
+'
+K=1
+   *put_on_field1
+P=X-OF(K)-BL(K)+1:IF P<P1(K) THEN P=P1(K)
+   *put_on_field2
+IF P>P2(K) OR X<OF(K)+P THEN *put_on_field3
+IF FNW(K,P,F1,AD!) THEN *put_on_field4
+P=P+1:GOTO *put_on_field2
+   *put_on_field3
+IF K<NB THEN K=K+1:GOTO *put_on_field1
+GOSUB *put_dot:F=1:GOTO *put_on_field9
+
+'
+   *put_on_field4
+K=1
+   *put_on_field5
+IF X>=OF(K)+P2(K) AND X<=OF(K)+P1(K)+BL(K)-1 THEN GOSUB *put_box:GOSUB *put_box_bg:F=1:GOTO *put_on_field9
+IF K<NB THEN K=K+1:GOTO *put_on_field5
+GOTO *put_on_field9
+
+
+'
+   *put_on_field6
+PP=0
+FOR K=1 TO NB
+P=P1(K)
+   *put_on_field7
+IF FNW(K,P,F1,AD!) AND X>=OF(K)+P AND X<=OF(K)+P+BL(K)-1 THEN PP=PP+1:PK=K:GOTO *put_on_field8
+IF P<P2(K) THEN P=P+1:GOTO *put_on_field7
+   *put_on_field8
+NEXT
+IF PP=1 THEN K=PK:GOSUB *put_box:F=1
+
+
+'
+   *put_on_field9
+NEXT
+
+
+'--- Situation changed? ---
+STRIG(0)OFF
+IF E THEN RETURN
+IF F THEN FF=1:GOTO *decide_pos
+VPOKE A3!+N*5+4,2+(CC=MX)
+RETURN
+
+
+
+'=== Solve Main B ===
+   *solve_main_B
+E=2:RETURN
+
+
+
+
+
+'##### Sub Routines #####
+'=== Set Screen ===
+   *set_screen
+SETPAGE0,1
+LINE(0,0)-(2,2),1,BF:PSET(7,1),1
+FOR I=0 TO 3
+LINE(I*5+6,5)-(I*5+8,9),I+4,BF
+LINE(I*5+5,6)-(I*5+9,8),I+4,BF
+NEXT
+
+SETPAGE,0
+IF POINT(7,7)=3 THEN RETURN
+CLS
+FOR I=0 TO WD:LINE(I*4+7,7)-(I*4+7,HT*4+7),2:NEXT
+FOR I=0 TO HT:LINE(7,I*4+7)-(WD*4+7,I*4+7),2:NEXT
+FOR I=0 TO WD STEP 5:LINE(I*4+7,7)-(I*4+7,HT*4+7),3:NEXT
+FOR I=0 TO HT STEP 5:LINE(7,I*4+7)-(WD*4+7,I*4+7),3:NEXT
+
+SETPAGE,2
+FOR J=1 TO HT
+AD!=FNFA!(J,0,WD,A1!)
+FOR I=1 TO WD
+DD=VPEEK(AD!+I):DD=(DD\254)+(DD\255)
+COPY(DD*3,0)-(DD*3+2,2),1 TO (I*4+4,J*4+4),0
+NEXT:NEXT
+RETURN
+
+
+
+'=== Input Filename ===
+   *input_filename
+PRESET(50,150):PRINT#1,"Filename:"
+FL$=""
+   *input_filename1
+PRESET(125,150):PRINT#1,FL$+" "
+K$=INPUT$(1)
+IF K$=CHR$(13) THEN RETURN
+IF K$=CHR$(8) AND FL$<>"" THEN FL$=LEFT$(FL$,LEN(FL$)-1):GOTO *input_filename1
+IF ASC(K$)>31 AND K$<>CHR$(127) AND LEN(FL$)<12 THEN FL$=FL$+K$
+GOTO *input_filename1
+
+
+
+'=== Set Variable ===
+   *set_variable
+HT=VPEEK(0):WD=VPEEK(1)
+A1!=VPEEK( 2)+VPEEK( 3)*256
+A2!=VPEEK( 4)+VPEEK( 5)*256
+A3!=VPEEK( 6)+VPEEK( 7)*256
+A4!=VPEEK( 8)+VPEEK( 9)*256
+BM=VPEEK(10)
+ERASE BL,OF,X1,X2,P1,P2
+DIM BL(BM),OF(BM)
+DIM X1(BM),X2(BM),P1(BM),P2(BM)
+RETURN
+
+
+
+'=== Block can be here? ===
+   *test_block
+I=X
+   do
+IF FNF(M,I,MX,FA!)=255 THEN A=0:RETURN
+I=I+1
+   loop while I<X+BL(K)
+IF FNF(M,X-1,MX,FA!)<254 OR FNF(M,X+BL(K),MX,FA!)<254 THEN A=0 ELSE A=1
+RETURN
+
+
+
+'=== Put Dot ===
+   *put_dot
+VPOKE FNFA!(M,X,MX,FA!),255
+VPOKE FNFA!(X,M,MY,BA!),255
+IF N<HT THEN DX=X:DY=M:VPOKE A3!+(HT+X-1)*5+4,0:GOTO *put_dot1
+             DX=M:DY=X:VPOKE A3!+(X-1)*5+4,0
+   *put_dot1
+DD=2:GOSUB *draw_chr
+RETURN
+
+
+
+'=== Put Box ===
+   *put_box
+VPOKE FNFA!(M,X,MX,FA!),K
+IF N<HT THEN DX=X:DY=M ELSE DX=M:DY=X
+DD=0:GOSUB *draw_chr
+RETURN
+
+
+
+'=== Put Box to Background ===
+   *put_box_bg
+VPOKE FNFA!(X,M,MY,BA!),0
+IF N<HT THEN VPOKE A3!+(HT+X-1)*5+4,0:RETURN
+             VPOKE A3!+(X-1)*5+4,0:RETURN
+
+
+
+'=== Can't Go ===
+   *cannot_go
+C=0:I=0
+   *cannot_go1
+IF VPEEK(A3!+I*5+4)>1 THEN RK=RK+1:GOTO *cannot_go2
+IF I<HT+WD-1 THEN I=I+1:GOTO *cannot_go1
+E=1:FOR I=0 TO 9:BEEP:NEXT
+   do
+   loop while INKEY$<>""
+K$=INPUT$(1)
+   *cannot_go2
+RETURN
+
+
+
+'=== Interrupt by Space-key ===
+   *int_strig
+E=1:BEEP:RETURN
+
+
+
+'=== Error ===
+   *error
+BEEP:SETPAGE,0
+PRESET(95,95):PRINT#1,"Error!"
+   do
+   loop while INKEY$<>""
+K$=INPUT$(1)
+PSET(7,7),14:GOTO *main_menu
+
+
+
+'=== Draw Character ===
+   *draw_chr
+COPY(DD*3,0)-(DD*3+2,2),1 TO (DX*4+4,DY*4+4),0
+RETURN
+
+
+
+'=== Mark Set ===
+   *mark_set
+IF N<HT THEN COPY(RK*5,5)-(RK*5+4,9),1 TO (2,N*4+7),0:RETURN
+COPY(RK*5,5)-(RK*5+4,9),1 TO ((N-HT)*4+7,2),0:RETURN
+
+
+
+'=== Mark Reset ===
+   *mark_reset
+IF N<HT THEN COPY(0,5)-(4,9),1 TO (2,N*4+7),0:RETURN
+COPY(0,5)-(4,9),1 TO ((N-HT)*4+7,2),0:RETURN
+
+
+
+'=== TABLE DATA ===
+DATA 0,0,0,-1,1,-1,1,0,1,1,0,1,-1,1,-1,0,-1,-1
+
+
+
+'=== SPRITE DATA ===
+DATA F8,88,88,88,F8,07,07,07
+DATA 07,07,07,07,00,00,00,00
+DATA 00,00,00,00,00,F0,F0,F0
+DATA F0,F0,F0,F0,00,00,00,00
+
+DATA F8,88,88,88,F8,07,04,04
+DATA 04,04,04,07,00,00,00,00
+DATA 00,00,00,00,00,F0,10,10
+DATA 10,10,10,F0,00,00,00,00
+
+DATA F8,88,88,88,F8,07,04,05
+DATA 05,05,04,07,00,00,00,00
+DATA 00,00,00,00,00,F0,10,D0
+DATA D0,D0,10,F0,00,00,00,00
+
